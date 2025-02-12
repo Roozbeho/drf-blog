@@ -45,3 +45,6 @@ class RegistrationSerializer(serializers.ModelSerializer):
         user.save()
         
         return user
+    
+class OtpCodeSerializer(serializers.Serializer):
+    otpcode = serializers.IntegerField(min_value=100000, max_value=9999999)
