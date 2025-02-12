@@ -4,6 +4,7 @@ from django.core.cache import cache
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.throttling import UserRateThrottle
@@ -11,7 +12,7 @@ from rest_framework.throttling import UserRateThrottle
 from .models import CustomUser
 from . import serializers
 from .utils import generate_tokens_for_user
-from .permissions import NotAuthenticatedUserOnly, NotVerifiedAccountOnly
+from .permissions import NotAuthenticatedUserOnly, NotVerifiedAccountOnly, VerifiedAccountOnly
 from .token import CustomJWTAuthenticationClass
 from .tasks import send_async_email_to_user
 
@@ -86,3 +87,26 @@ class AccountVerificationApiView(APIView):
             return Response({'success': 'Your account has been verified'}, status=status.HTTP_200_OK)
 
         return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
+    
+class ChangePasswordApiView(GenericAPIView):
+    permission_classes = (IsAuthenticated, VerifiedAccountOnly)
+    authentication_classes = (CustomJWTAuthenticationClass, )
+    serializer_class = serializers.ChangePasswordSerializer
+
+    def put(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user: CustomUser = request.user
+        old_password = serializer.validated_data['old_password']
+        new_password = serializer.validated_data['new_password']
+
+        if not user.check_password(old_password):
+            return Response({'error': 'Old password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if old_password == new_password:
+            return Response({'error': 'New password cannot be the same as the old password'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user.set_password(new_password)
+        user.save()
+        return Response({'success': 'Password chnged successfully'}, status=status.HTTP_200_OK)

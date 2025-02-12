@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework.validators import UniqueValidator
@@ -48,3 +50,12 @@ class RegistrationSerializer(serializers.ModelSerializer):
     
 class OtpCodeSerializer(serializers.Serializer):
     otpcode = serializers.IntegerField(min_value=100000, max_value=9999999)
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+
+    def validate_new_password(self, value):
+        if not re.match(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$', value):
+            raise serializers.ValidationError('Minimum eight characters, at least one letter and one number')
+        return value

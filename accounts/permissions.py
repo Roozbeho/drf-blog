@@ -10,3 +10,7 @@ class NotAuthenticatedUserOnly(permissions.BasePermission):
 class NotVerifiedAccountOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         return not request.user.verified
+    
+class VerifiedAccountOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.verified
