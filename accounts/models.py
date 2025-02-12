@@ -1,15 +1,16 @@
 from random import randint
 from hashlib import sha256
+from enum import IntEnum
 
 from django.db import models
 from django.core.cache import cache
-
+from django.db import transaction
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 
 from .managers import CustomUserManager
 
-class Permission:
+class Permission(IntEnum):
     FOLLOW = 1
     LIKE = 2
     BOOKMARK = 4
@@ -22,9 +23,7 @@ class Permission:
 
     @classmethod
     def get_name(cls, val):
-        return {value:key \
-                for key, value in dict(vars(Permission)).items() if isinstance(value, int)
-            }.get(val, None)
+        return {value: key for key, value in cls.__members__.items()}.get(val, None)
 
 class Role(models.Model):
     name = models.CharField(unique=True, max_length=100)
@@ -32,6 +31,7 @@ class Role(models.Model):
     permissions = models.IntegerField(default=0)
 
     @classmethod
+    @transaction.atomic
     def insert_roles(cls):
         roles = {
             'User': [Permission.LIKE, Permission.COMMENT],  # Basic users
@@ -78,6 +78,9 @@ class Role(models.Model):
     def has_permission(self, perm):
         return (self.permissions & perm) == perm
     
+    def get_permissions(self):
+        return [perm for perm in Permission if self.has_permission(perm)]
+
     def __str__(self):
         return f'{self.name} (permissions: {self.permissions})'
       
@@ -87,7 +90,6 @@ class CustomUser(AbstractUser):
     bio = models.TextField(verbose_name=_('Biography'), max_length=250, blank=True, null=True)
     avatar = models.ImageField(verbose_name=_('Profile Avatar'), upload_to='profile_avatars', blank=True, null=True)
     is_active = models.BooleanField(verbose_name=_('Is Active'), default=True)
-    is_admin = models.BooleanField(verbose_name=_('Is Admin'), default=False)
     verified = models.BooleanField(verbose_name=_('Is Verified'), default=False)
     is_premium = models.BooleanField(verbose_name=_('Is Premium'), default=False)
     role = models.ForeignKey(Role, default=Role.get_default_role_pk, null=True,
@@ -100,22 +102,28 @@ class CustomUser(AbstractUser):
     REQUIRED_FIELDS = ('username', )
 
     objects = CustomUserManager()
+    
+    @property
+    def is_admin(self):
+        return self.role and self.role.has_permission(Permission.ADMIN)
+    
+    def _get_otp_cache_key(self):
+        return f'user_otp_{self.id}'
 
     def generate_otp_code(self):
         if self.verified:
             return None
 
         otp_code = randint(100000, 999999)
-        cache.set(f'user_otp_{self.id}', otp_code, timeout=60*5) # 5 minutes
+        cache.set(self._get_otp_cache_key(), otp_code, timeout=60*5) # 5 minutes
         return otp_code
     
     def validate_verification_code(self, code):
-        cache_key = f'user_otp_{self.id}'
-        otp_code =  cache.get(cache_key)
+        otp_code =  cache.get(self._get_otp_cache_key())
         if otp_code and str(otp_code) == str(code):
             self.verified = True
             self.save()
-            cache.delete(cache_key)
+            cache.delete(self._get_otp_cache_key())
             return True
         return False
 
