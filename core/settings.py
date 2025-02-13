@@ -22,6 +22,7 @@ INSTALLED_APPS = [
 
     # LOCAL
     'accounts.apps.AccountsConfig',
+    'blog.apps.BlogConfig',
 
     # 3d PARTY APPS
     'rest_framework',

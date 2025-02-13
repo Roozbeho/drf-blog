@@ -107,6 +107,9 @@ class CustomUser(AbstractUser):
     def is_admin(self):
         return self.role and self.role.has_permission(Permission.ADMIN)
     
+    def can(self, perm):
+        return self.role is not None and self.role.has_permission(perm)
+    
     def _get_otp_cache_key(self):
         return f'user_otp_{self.id}'
 
