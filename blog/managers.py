@@ -33,7 +33,8 @@ class PostQuerySet(QuerySet):
 
 class PostCustomManager(Manager):
     def get_queryset(self):
-        return PostQuerySet(self.model, using=self._db).filter(status=self.model.Status.PUBLISHED)
+        return PostQuerySet(self.model, using=self._db)\
+            .filter(status=self.model.Status.PUBLISHED, is_active=True)
     
     def get_queryset_unfiltered(self):
         return PostQuerySet(self.model, using=self._db)
