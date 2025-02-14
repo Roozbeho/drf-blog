@@ -78,6 +78,9 @@ class Post(models.Model):
             slug = slugify(title) + '-' + ''.join(choices(characters, k=10))
         return slug
     
+    @property
+    def post_like_count(self):
+        return self.likes.all().count()
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -104,3 +107,16 @@ class PostImage(models.Model):
 
     def __str__(self):
         return f'Image {self.id} for {self.post.title}'
+    
+
+class Like(models.Model):
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='likes')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')
+        ordering = ('-created_at', )
+    
+    def __str__(self):
+        return f'{self.user.username} Like {self.post.title} Post.'
