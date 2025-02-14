@@ -2,14 +2,14 @@ from django.shortcuts import render
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
-from rest_framework.views import Response, status
+from rest_framework.views import Response, status, APIView
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets
 from rest_framework import mixins
 from rest_framework.throttling import UserRateThrottle
 from . import serializers
-from .models import Tag, Post, PostImage
+from .models import Tag, Post, PostImage, Like
 from .pagination import PostListPagination
 from accounts.models import Role, Permission
 from .permissions import CanUserWritePost, OwnerAndAdminOnly
@@ -150,7 +150,40 @@ class ImagesApiView(viewsets.ModelViewSet):
         return Response({'success': 'image deleted'}, status=status.HTTP_204_NO_CONTENT)
     
 
-
-
+class LikeApiView(viewsets.GenericViewSet):
     
+    def _get_post(self, post_slug=None):
+        if not post_slug:
+            return Response({'error': 'Post slug is required'}, status=status.HTTP_400_BAD_REQUEST)
+        return get_object_or_404(Post, slug=post_slug)
+    
+    def get_permissions(self):
+        if self.action == 'create':
+            return [IsAuthenticated()]
+        return []
+    
+    def retrieve(self, request, post_slug=None):
+        post = self._get_post(post_slug)
+        
+        post_likes_count = post.post_like_count
+
+        # Check if the user has liked the post
+        user = request.user if request.user.is_authenticated else None
+        does_user_likes = post.likes.filter(user=user).exists()
+        
+        return Response(
+            {'post_likes_count': post_likes_count, 'does_user_likes':does_user_likes},
+            status=status.HTTP_200_OK
+        )
+
+    def create(self, request, post_slug=None):
+        post = self._get_post(post_slug)
+
+        like_obj, created = Like.objects.get_or_create(post=post, user=request.user)
+        
+        if created:
+            return Response({'success': 'You Liked thise post'}, status=status.HTTP_201_CREATED)
+        
+        like_obj.delete()
+        return Response({'success': 'You unliked this post'}, status=status.HTTP_204_NO_CONTENT)
     
