@@ -1,3 +1,4 @@
+import uuid
 import string
 import bleach
 from random import choices
@@ -120,3 +121,27 @@ class Like(models.Model):
     
     def __str__(self):
         return f'{self.user.username} Like {self.post.title} Post.'
+    
+
+class Comment(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True)
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='comments')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    parent_comment = models.ForeignKey('self', on_delete=models.CASCADE,
+                                       null=True, blank=True, related_name='reply')
+    content = models.TextField()
+    level = models.IntegerField(default=0, help_text="it's help to modify model level depth")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=('post', ))]
+    
+    def save(self, *args, **kwargs):
+        if self.parent_comment and not self.pk:
+            self.level = 1
+        super(Comment, self).save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.user.username} comments on {self.post} id {self.pk}'

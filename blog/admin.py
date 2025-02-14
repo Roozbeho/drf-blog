@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html, urlencode
 
-from .models import Post, PostImage, Tag, Like
+from .models import Post, PostImage, Tag, Like, Comment
 
 
 @admin.register(Tag)
@@ -75,3 +75,44 @@ class Likeadmin(admin.ModelAdmin):
     def get_post(self, obj):
         link = reverse('admin:blog_post_change', args=[obj.post.pk])
         return format_html(f'<a href="{link}">{obj.post.title[:20]}</a>')
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = [
+        "_content",
+        "user_detail_page",
+        "post_detail_page",
+        "_parent_comment",
+        "is_active",
+    ]
+    search_filter = ["user", "post"]
+    list_filter = ["is_active", "created_at"]
+    show_facets = admin.ShowFacets.ALLOW
+    list_select_related = ["user", "post"]
+    list_per_page = 100
+
+    @admin.display(description="Post")
+    def post_detail_page(self, obj):
+        url = reverse("admin:blog_post_change", args=[obj.post.pk])
+        return format_html(f'<a href="{url}">{obj.post.title[:10]} ...</a>')
+
+    @admin.display(description="Author")
+    def user_detail_page(self, obj):
+        url = reverse("admin:accounts_customuser_change", args=[obj.user.pk])
+        return format_html(f'<a href="{url}">{str(obj.user).split('-')[0].split(':')[-1]}</a>')
+
+    def _content(self, obj):
+        return f"{obj.content[:10]}..."
+
+    @admin.display(description="parent comment")
+    def _parent_comment(self, obj):
+        if obj.parent_comment:
+            url = reverse("admin:blog_comment_change", args=[obj.parent_comment.pk])
+            return format_html(f'<a href="{url}">parent comments</a>')
+
+        url = (
+            reverse("admin:blog_comment_changelist")
+            + "?"
+            + urlencode({"parent_comment__pk": obj.pk})
+        )
+        return format_html(f'<a href="{url}">all sub comments</a>')
