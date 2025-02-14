@@ -27,7 +27,7 @@ class Tag(models.Model):
         return self.name
 
 def thumbnail_path(instance, filename):
-    return f"posts/{instance.post.title}/post_thumbnail/{filename}"
+    return f"posts/{instance.title}/post_thumbnail/{filename}"
 
 class Post(models.Model):
     class Status(models.TextChoices):
@@ -36,15 +36,16 @@ class Post(models.Model):
         ARCHIVED = "AR", "Archived"
 
     title = models.CharField(max_length=100)
-    slug = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True, blank=True)
     body = models.TextField()
-    body_html = models.TextField()
+    body_html = models.TextField(blank=True)
     thumbnail = models.ImageField(upload_to=thumbnail_path, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
     visit_counter = models.IntegerField(editable=False, default=0)
     premium = models.BooleanField(default=False, help_text='thise post only available for premium users')
     author = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='posts')
     tag = models.ManyToManyField(Tag, related_name='posts')
+    is_active = models.BooleanField(default=True)
     published_at = models.DateTimeField(auto_now_add=True)
 
     objects = models.Manager()
@@ -60,7 +61,7 @@ class Post(models.Model):
     def on_changed_body(self):
         allowed_tags = ['a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 'li', 'ol', 'ore',
                         'strong', 'ul', 'h1', 'h2',' h3', 'p']
-        self.body_html = bleach.linkify(bleach.clean(
+        return bleach.linkify(bleach.clean(
             markdown(self.body, output_format='html'),
             tags=allowed_tags, strip=True))
 
@@ -71,9 +72,10 @@ class Post(models.Model):
     @classmethod
     def create_custom_slug(cls, title):
         characters = string.ascii_letters + string.digits
+        slug = slugify(title) + '-' + ''.join(choices(characters, k=10))
 
         while cls.objects.filter(slug=slug).exists():
-            slug = slugify(title) + ''.join(choices(characters, k=10))
+            slug = slugify(title) + '-' + ''.join(choices(characters, k=10))
         return slug
     
     
