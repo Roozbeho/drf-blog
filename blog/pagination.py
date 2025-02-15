@@ -15,3 +15,18 @@ class PostListPagination(PageNumberPagination):
             'total': self.page.paginator.count,
             'result': data
         })
+    
+class CommentListPagination(PageNumberPagination):
+    page_size_query_param = 'cmnt_size'
+    max_page_size = 20
+    page_size = 10
+
+    def get_paginated_response(self, data):
+        return Response({
+            'links': {
+                'next': self.get_next_link(),
+                'prev': self.get_previous_link()
+            },
+            'total': self.page.paginator.count,
+            'comments': data
+        })

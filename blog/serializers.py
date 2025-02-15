@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from django.conf import settings
 from django.db import transaction
+from django.urls import reverse
 
-from .models import Post, Tag, PostImage
+from .models import Post, Tag, PostImage, Comment
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -119,3 +120,45 @@ class PostImageSerializer(serializers.ModelSerializer):
         if not Post.objects.filter(slug=value).exists():
             serializers.ValidationError('post dosent exist')
         return value
+
+class CommentSerializer(serializers.ModelSerializer):
+    post = serializers.HyperlinkedRelatedField(read_only='True',
+                                               view_name='blog:post-detail', lookup_field='slug')
+    class Meta:
+        model = Comment
+        fields = ['user', 'post', 'content', 'created_at']
+
+    def get_fields(self):
+        fields = super(CommentSerializer, self).get_fields()
+        fields['reply'] = CommentSerializer(many=True)
+        if self.context.get('is_owner'):
+            fields['reply_link'] = serializers.SerializerMethodField()
+        return fields
+    
+    def get_reply_link(self, obj):
+        return f'{reverse('blog:post-commnts-reply', args=[obj.post.slug, obj.uuid])}'
+
+class CreateCommentSerializer(serializers.ModelSerializer):
+    parent_comment = serializers.PrimaryKeyRelatedField(
+        required=False, queryset=Comment.objects.filter(is_active=True), pk_field='uuid')
+    
+    class Meta:
+        model = Comment
+        fields = ['content', 'parent_comment']
+
+    def create(self, validated_data):
+        user = self.context.get('request').user
+        post = self.context.get('post')
+        parent_comment = self.context.get('parent_comment', None)
+
+        return Comment.objects.create(user=user, post=post, parent_comment=parent_comment, **validated_data)
+
+class UsersUpdateCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['content']
+
+class AdminUpdateCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['content', 'is_active']
