@@ -121,6 +121,12 @@ class PostImageSerializer(serializers.ModelSerializer):
             serializers.ValidationError('post dosent exist')
         return value
 
+class TagListSerializer(serializers.ModelSerializer):
+    url = serializers.HyperlinkedIdentityField(view_name='blog:post-by-tag', lookup_field='slug')
+    class Meta:
+        model = Tag
+        fields = ['url', 'name']
+
 class CommentSerializer(serializers.ModelSerializer):
     post = serializers.HyperlinkedRelatedField(read_only='True',
                                                view_name='blog:post-detail', lookup_field='slug')

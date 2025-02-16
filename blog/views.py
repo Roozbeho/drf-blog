@@ -149,7 +149,41 @@ class ImagesApiView(viewsets.ModelViewSet):
         image = get_object_or_404(PostImage, pk=pk, post=post)
         image.delete()
         return Response({'success': 'image deleted'}, status=status.HTTP_204_NO_CONTENT)
+
+class TagListApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
+    queryset = Tag.objects.all()
+    serializer_class = serializers.TagListSerializer
+
+class PostsByTagApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
+    pagination_class = PostListPagination
+    serializer_class = serializers.PostsListSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_authenticated and user.can(Permission.ADMIN):
+            return Post.objects.all()
+        
+        return Post.active_objects.get_premium_posts(premium=user.is_authenticated and user.is_premium)
     
+    def list(self, request, *args, **kwargs):
+        slug = kwargs.get('slug')
+        
+        if not slug:
+            return Response({'error': 'Tag slug should provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        queryset = self.get_queryset().filter(tag__slug=slug)
+
+        page = self.paginate_queryset(queryset)
+
+        if page:
+            serializer = self.get_serializer(page, many=True)
+            result = self.get_paginated_response(serializer.data)
+            return Response(result.data, status=status.HTTP_200_OK)
+
+        serailizer = self.get_serializer(queryset, many=True)
+        return Response(serailizer.data, status=status.HTTP_200_OK)
+
 
 class LikeApiView(viewsets.GenericViewSet):
     

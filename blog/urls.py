@@ -27,10 +27,8 @@ urlpatterns = [
     path('post/<slug:post_slug>/like/', views.LikeApiView.as_view({'post': 'create'}), name='toggle-like'),
     path('comment/<uuid:uuid>/',
          views.UpdateAndDeleteCommentApiView.as_view(
-             {'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='comment')
-    # path('post/<slug:post_slug>/comments/',
-    #      views.ListAndCreateCommentApiView.as_view({'get': 'list', 'post': 'create'}), name='comment'),
-    # path('post/<slug:post_slug>/comments/<uuid:uuid>/reply',
-    #      views.ListAndCreateCommentApiView.as_view({'post': 'reply'}), name='reply')
+             {'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='comment'),
+    path('tags/', views.TagListApiView.as_view({'get': 'list'}), name='tag-list'),
+    path('post/tags/<slug:slug>/', views.PostsByTagApiView.as_view({'get': 'list'}), name='post-by-tag'),
 
 ]
