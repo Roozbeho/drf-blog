@@ -19,3 +19,7 @@ class CanUserWriteComment(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         user = request.user
         return (user.can(Permission.COMMENT) and obj.user == user) or user.can(Permission.ADMIN)
+    
+class CanUserBookMarkPosts(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.can(Permission.BOOKMARK)

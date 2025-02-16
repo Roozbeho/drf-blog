@@ -10,10 +10,10 @@ from rest_framework import viewsets
 from rest_framework import mixins
 from rest_framework.throttling import UserRateThrottle
 from . import serializers
-from .models import Tag, Post, PostImage, Like, Comment
+from .models import Tag, Post, PostImage, Like, Comment, BookMark
 from .pagination import PostListPagination, CommentListPagination
 from accounts.models import Role, Permission
-from .permissions import CanUserWritePost, OwnerAndAdminOnly, CanUserWriteComment
+from .permissions import CanUserWritePost, OwnerAndAdminOnly, CanUserWriteComment, CanUserBookMarkPosts
 from .ordering import CustomOrderingFilter
 
 
@@ -344,3 +344,27 @@ class UpdateAndDeleteCommentApiView(viewsets.ModelViewSet):
             instance._prefetched_objects_cache = {}
 
         return Response(serializer.data)
+
+
+class BookMarkApiView(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated, CanUserBookMarkPosts]
+    
+    def get_queryset(self):
+        return Post.active_objects.filter(premium=self.request.user.is_premium)
+    
+    def get_object(self):
+        return get_object_or_404(self.get_queryset(), slug=self.kwargs.get('post_slug'))
+    
+    @action(detail=True, methods=['POST'], url_path='bookmark/')
+    def bookmark(self, request, *args, **kwargs):
+        post_obj = self.get_object()
+
+        bookmark_obj, created = BookMark.objects.get_or_create(user=request.user, post=post_obj)
+
+        if created:
+            return Response({'success': 'Post bookmarked'}, status=status.HTTP_201_CREATED)
+        
+        bookmark_obj.delete()
+        return Response({'success': 'Post Unbookmarked'}, status=status.HTTP_204_NO_CONTENT)
+
+

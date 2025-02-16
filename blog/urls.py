@@ -15,14 +15,14 @@ image_router.register(r'images', views.ImagesApiView, basename='post-images')
 comment_nested_router = routers.NestedSimpleRouter(router, f'post', lookup='post')
 comment_nested_router.register(f'comments', views.ListAndCreateCommentApiView, basename='post-commnts')
 
-# comment_router = DefaultRouter()
-# comment_router.register(r'comment', views.UpdateAndDeleteCommentApiView, basename='comment')
+router = DefaultRouter()
+router.register(r'posts', views.BookMarkApiView, basename='post-bookmark')
 
 urlpatterns = [
     path('', include(router.urls)),
     path('', include(image_router.urls)),
     path('', include(comment_nested_router.urls)),
-    # path('', include(comment_router.urls)),
+    path('post/<slug:post_slug>/bookmark/', views.BookMarkApiView.as_view({'post': 'bookmark'}), name='post-bookmark'),
     path('post/<slug:post_slug>/likes', views.LikeApiView.as_view({'get': 'retrieve'}), name='likes'),
     path('post/<slug:post_slug>/like/', views.LikeApiView.as_view({'post': 'create'}), name='toggle-like'),
     path('comment/<uuid:uuid>/',
