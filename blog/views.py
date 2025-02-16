@@ -348,15 +348,20 @@ class UpdateAndDeleteCommentApiView(viewsets.ModelViewSet):
 
 class BookMarkApiView(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated, CanUserBookMarkPosts]
-    
+    pagination_class = PostListPagination
+    serializer_class = serializers.PostsListSerializer 
+
     def get_queryset(self):
-        return Post.active_objects.filter(premium=self.request.user.is_premium)
-    
+        return Post.objects.filter(bookmarks__user=self.request.user)
+
     def get_object(self):
-        return get_object_or_404(self.get_queryset(), slug=self.kwargs.get('post_slug'))
-    
-    @action(detail=True, methods=['POST'], url_path='bookmark/')
-    def bookmark(self, request, *args, **kwargs):
+        return get_object_or_404(
+            Post.active_objects.filter(premium=self.request.user.is_premium),
+            slug=self.kwargs.get('post_slug')
+        )
+
+    @action(detail=True, methods=['POST'], url_path='bookmark')
+    def bookmark(self, request, post_slug=None):
         post_obj = self.get_object()
 
         bookmark_obj, created = BookMark.objects.get_or_create(user=request.user, post=post_obj)
@@ -365,6 +370,20 @@ class BookMarkApiView(viewsets.GenericViewSet):
             return Response({'success': 'Post bookmarked'}, status=status.HTTP_201_CREATED)
         
         bookmark_obj.delete()
-        return Response({'success': 'Post Unbookmarked'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({'success': 'Post unbookmarked'}, status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=False, methods=['GET'], url_path='bookmarks')
+    def list_bookmarks(self, request):
+
+        bookmarks_queryset = Post.objects.filter(bookmarks__user=request.user)
+        page = self.paginate_queryset(bookmarks_queryset)
+
+        if page:
+            serializer = self.get_serializer(page, many=True)
+            result = self.get_paginated_response(serializer.data)
+            return Response(result.data, status=status.HTTP_200_OK)
+
+        serailizer = self.get_serializer(bookmarks_queryset, many=True)
+        return Response(serailizer.data, status=status.HTTP_200_OK)
 
 
