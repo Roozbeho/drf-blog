@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import viewsets
 from rest_framework import mixins
 from rest_framework.throttling import UserRateThrottle
+from rest_framework.filters import SearchFilter
 from . import serializers
 from .models import Tag, Post, PostImage, Like, Comment, BookMark
 from .pagination import PostListPagination, CommentListPagination
@@ -23,6 +24,7 @@ class CreatePostRequestThrottle(UserRateThrottle):
 class PostApiView(viewsets.ModelViewSet):
     pagination_class = PostListPagination
     filter_backends = (CustomOrderingFilter, )
+    search_fields = ['=author__username']
     lookup_field = 'slug'
     lookup_url_kwarg = 'slug'
 

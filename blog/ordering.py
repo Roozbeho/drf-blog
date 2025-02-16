@@ -29,6 +29,9 @@ class CustomOrderingFilter(filters.OrderingFilter):
         """
         query_params = request.query_params
 
+        if query_params.get('search'):
+            queryset = queryset.filter(author__username=query_params.get('search'))
+
         if query_params.get("tag"):
             queryset = queryset.filter(tag__slug=query_params.get("tag"))
 
