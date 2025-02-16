@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 from .managers import CustomUserManager
 
@@ -133,3 +134,18 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return f'username: {self.username} - email: {self.email}'
     
+class Follow(models.Model):
+    follower = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='followers')
+    followed = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='following')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [['follower', 'followed']] 
+        ordering = ['-created_at']
+    
+    def clean(self):
+        if self.follower == self.followed:
+            raise ValidationError('users cant follow themselves')
+
+    def __str__(self):
+        return f'{self.follower} follow {self.followed}'

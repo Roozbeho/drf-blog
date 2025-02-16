@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CustomUser, Role, Permission
+from .models import CustomUser, Role, Permission, Follow
 
 
 
@@ -26,3 +26,10 @@ class RoleAdmin(admin.ModelAdmin):
         return ", ".join(
             [Permission.get_name(perm) for perm in permissions]
         ) if permissions else "No Permissions"
+
+
+@admin.register(Follow)
+class FollowAdmin(admin.ModelAdmin):
+    list_display = ['follower', 'followed', 'created_at']
+    search_fields = ['follower', 'followed']
+    list_filter = ['created_at']
