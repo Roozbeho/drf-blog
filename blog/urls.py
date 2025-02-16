@@ -8,6 +8,7 @@ app_name = 'blog'
 
 router = DefaultRouter()
 router.register(r'post', views.PostApiView, basename='post')
+router.register(r'posts/bookmarks', views.BookMarkApiView, basename='post-bookmark')
 
 image_router = routers.NestedSimpleRouter(router, r'post', lookup='post')
 image_router.register(r'images', views.ImagesApiView, basename='post-images')
@@ -15,8 +16,6 @@ image_router.register(r'images', views.ImagesApiView, basename='post-images')
 comment_nested_router = routers.NestedSimpleRouter(router, f'post', lookup='post')
 comment_nested_router.register(f'comments', views.ListAndCreateCommentApiView, basename='post-commnts')
 
-router = DefaultRouter()
-router.register(r'posts', views.BookMarkApiView, basename='post-bookmark')
 
 urlpatterns = [
     path('', include(router.urls)),
