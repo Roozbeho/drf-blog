@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 
 from rest_framework.views import Response, status, APIView
 from rest_framework.decorators import action
@@ -186,16 +187,35 @@ class PostsByTagApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
 
 
 class LikeApiView(viewsets.GenericViewSet):
+    serializer_class = serializers.PostsListSerializer
     
     def _get_post(self, post_slug=None):
         if not post_slug:
             return Response({'error': 'Post slug is required'}, status=status.HTTP_400_BAD_REQUEST)
-        return get_object_or_404(Post, slug=post_slug)
+        return get_object_or_404(
+            Post.active_objects.filter(
+                premium=self.request.user.is_authenticated and self.request.user.is_premium
+                ),
+            slug=post_slug
+            )
     
     def get_permissions(self):
-        if self.action == 'create':
+        if self.action in ['create', 'list']:
             return [IsAuthenticated()]
         return []
+    
+    def list(self, request, *args, **kwargs):
+        user = request.user
+        queryset = Post.active_objects.filter(Q(premium=user.is_premium) & Q(likes__user=user))
+        page = self.paginate_queryset(queryset)
+
+        if page:
+            serializer = self.get_serializer(page, many=True)
+            result = self.get_paginated_response(serializer.data)
+            return Response(result.data, status=status.HTTP_200_OK)
+
+        serailizer = self.get_serializer(queryset, many=True)
+        return Response(serailizer.data, status=status.HTTP_200_OK)
     
     def retrieve(self, request, post_slug=None):
         post = self._get_post(post_slug)

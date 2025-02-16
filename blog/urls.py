@@ -26,6 +26,7 @@ urlpatterns = [
     path('', include(bookmark_router.urls)),
     path('bookmarks/', views.BookMarkApiView.as_view({'get': 'list_bookmarks'}), name='user-bookmarks'),
     path('post/<slug:post_slug>/bookmark/', views.BookMarkApiView.as_view({'post': 'bookmark'}), name='post-bookmark'),
+    path('likes/', views.LikeApiView.as_view({'get': 'list'}), name='user-likes'),
     path('post/<slug:post_slug>/likes', views.LikeApiView.as_view({'get': 'retrieve'}), name='likes'),
     path('post/<slug:post_slug>/like/', views.LikeApiView.as_view({'post': 'create'}), name='toggle-like'),
     path('comment/<uuid:uuid>/',
