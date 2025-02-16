@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework.validators import UniqueValidator
 
-from .models import CustomUser
+from .models import CustomUser, Follow
 
 class CustomUserSerializer(serializers.ModelSerializer):
 
@@ -59,3 +59,15 @@ class ChangePasswordSerializer(serializers.Serializer):
         if not re.match(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$', value):
             raise serializers.ValidationError('Minimum eight characters, at least one letter and one number')
         return value
+    
+class FollowerListSerializer(serializers.ModelSerializer):
+    # follower = serializers.HyperlinkedIdentityField(view_name=)
+    class Meta:
+        model = Follow
+        fields = ['follower']
+
+class FollowingListSerializer(serializers.ModelSerializer):
+    # followed = serializers.HyperlinkedIdentityField(view_name=)
+    class Meta:
+        model = Follow
+        fields = ['followed']
