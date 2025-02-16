@@ -83,6 +83,10 @@ class Post(models.Model):
     def post_like_count(self):
         return self.likes.all().count()
     
+    @property
+    def post_bookmark_count(self):
+        return self.bookmarks.all().count()
+    
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = Post.create_custom_slug(self.title)
@@ -145,3 +149,16 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'{self.user.username} comments on {self.post} id {self.pk}'
+    
+
+class BookMark(models.Model):
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='bookmarks')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='bookmarks')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Bookmarks'
+        unique_together = ('user', 'post')
+    
+    def __str__(self):
+        return f'{self.user.username} bookmark {self.post.title} post'

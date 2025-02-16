@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html, urlencode
 
-from .models import Post, PostImage, Tag, Like, Comment
+from .models import Post, PostImage, Tag, Like, Comment, BookMark
 
 
 @admin.register(Tag)
@@ -116,3 +116,22 @@ class CommentAdmin(admin.ModelAdmin):
             + urlencode({"parent_comment__pk": obj.pk})
         )
         return format_html(f'<a href="{url}">all sub comments</a>')
+    
+@admin.register(BookMark)
+class Bookmarkadmin(admin.ModelAdmin):
+    list_display = ['get_user', 'get_post', 'created_at']
+    search_fields = ['user', 'post']
+    list_filter = ['created_at']
+    list_per_page = 100
+    list_select_related = ['user', 'post']
+
+
+    @admin.display(description='User')
+    def get_user(self, obj):
+        link = reverse('admin:accounts_customuser_change', args=[obj.user.pk])
+        return format_html(f'<a href="{link}">{obj.user.username}</a>')
+    
+    @admin.display(description='Post')
+    def get_post(self, obj):
+        link = reverse('admin:blog_post_change', args=[obj.post.pk])
+        return format_html(f'<a href="{link}">{obj.post.title[:20]}</a>')
