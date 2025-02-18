@@ -3,6 +3,9 @@ import re
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from rest_framework.validators import UniqueValidator
+from django.urls import reverse
+from django.conf import settings
+from urllib.parse import urlencode
 
 from .models import CustomUser, Follow
 
@@ -71,3 +74,73 @@ class FollowingListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Follow
         fields = ['followed']
+
+class UserPublicProfileSeriallizer(serializers.ModelSerializer):
+    avatar = serializers.SerializerMethodField()
+    posts_that_write_by_user_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ['username', 'bio', 'avatar', 'posts_that_write_by_user_url',]
+    def get_avatar(self, obj):
+        # TODO: set settings.DEFAULT_USER_AVATAR
+        return obj.avatar.url if obj.avatar else None
+    
+    def get_posts_that_write_by_user_url(self, obj):
+        return reverse('blog:post-list') +  "?" + urlencode({'search': obj.username})
+class UserPrivateProfileSerializer(UserPublicProfileSeriallizer):
+    activate = serializers.SerializerMethodField()
+    premium = serializers.SerializerMethodField()
+    avatar = serializers.SerializerMethodField()
+    number_of_posts = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    posts_that_write_by_user_url = serializers.SerializerMethodField()
+    likes_posts_url = serializers.SerializerMethodField()
+    follower_list_url = serializers.SerializerMethodField()
+    following_list_url = serializers.SerializerMethodField()
+    bookmarked_posts_list_url = serializers.SerializerMethodField() 
+
+    class Meta(UserPublicProfileSeriallizer.Meta):
+        fields = UserPublicProfileSeriallizer.Meta.fields + [
+            'email', 'activate', 'premium', 'number_of_posts', 'followers_count', 'following_count',
+            'follower_list_url', 'following_list_url', 'bookmarked_posts_list_url', 'likes_posts_url'
+        ]
+
+    def get_activate(self, obj):
+        if obj.is_active:
+            return True
+        return reverse('auth:account-verify')
+    
+    def get_premium(self, obj):
+        # TODO: Implement premium and point logic when required
+        return obj.is_premium
+    
+    def get_avatar(self, obj):
+        # TODO: set settings.DEFAULT_USER_AVATAR
+        return obj.avatar.url if obj.avatar else None
+    
+    def get_number_of_posts(self, obj):
+        return obj.posts.count()
+    
+    def get_followers_count(self, obj):
+        return obj.followers.count()
+    
+    def get_following_count(self, obj):
+        return obj.following.count()
+    
+    def get_posts_that_write_by_user_url(self, obj):
+        return reverse('blog:post-list') +  "?" + urlencode({'search': obj.username})
+    
+    def get_likes_posts_url(self, obj):
+        return reverse('blog:user-likes')
+    
+    def get_follower_list_url(self, obj):
+        return reverse('auth:follow-followers-list')
+    
+    def get_following_list_url(self, obj):
+        return reverse('auth:follow-following-list')
+    
+    def get_bookmarked_posts_list_url(self, obj):
+        return reverse('blog:user-bookmarks')
+        

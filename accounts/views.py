@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404
-
+from django.db.models import Prefetch
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -11,13 +11,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.decorators import action
+from rest_framework import mixins
+from django.db.models import Count
 
-from .models import CustomUser, Follow
+from .models import CustomUser, Follow, Permission
 from . import serializers
 from .utils import generate_tokens_for_user
 from .permissions import NotAuthenticatedUserOnly, NotVerifiedAccountOnly, VerifiedAccountOnly
 from .token import CustomJWTAuthenticationClass
 from .tasks import send_async_email_to_user
+from blog.models import Post
 
 class LoginApiView(APIView):
     permission_classes = (NotAuthenticatedUserOnly, )
@@ -151,3 +154,24 @@ class FollowApiView(viewsets.ViewSet, viewsets.GenericViewSet):
     @action(methods=['GET'], detail=False, url_path='following', url_name='following-list')
     def following_list(self, request):
         return self._get_follow_list('follower', serializers.FollowingListSerializer)
+    
+class UserProfileApiView(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+
+    def get_queryset(self):
+        return CustomUser.objects.all()
+    
+    def get_object(self):
+        return get_object_or_404(self.get_queryset(), username=self.kwargs.get('username'))
+
+    def get_serializer_class(self, *args, **kwargs):
+        user = self.request.user
+
+        if self.get_object() == user or (user.is_authenticated and user.can(Permission.ADMIN)):
+            return serializers.UserPrivateProfileSerializer
+        return serializers.UserPublicProfileSeriallizer
+    
+    def retrieve(self, request, *args, **kwargs):
+        user_obj = self.get_object()
+        serializer = self.get_serializer(user_obj)
+        print(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)

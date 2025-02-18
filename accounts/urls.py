@@ -14,4 +14,5 @@ urlpatterns = [
     path('register/', views.RegistrationApiView.as_view(), name='register'),
     path('account-verify/', views.AccountVerificationApiView.as_view(), name='account-verify'),
     path('user/change-password/', views.ChangePasswordApiView.as_view(), name='change-password'),
+    path('user/<str:username>/', views.UserProfileApiView.as_view({'get': 'retrieve'}), name='user-profil'),
 ]
