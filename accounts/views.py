@@ -13,6 +13,8 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.decorators import action
 from rest_framework import mixins
 from django.db.models import Count
+from django.urls import resolve
+from django.contrib.auth.signals import user_logged_in, user_logged_out
 
 from .models import CustomUser, Follow, Permission
 from . import serializers
@@ -20,14 +22,15 @@ from .utils import generate_tokens_for_user
 from .permissions import NotAuthenticatedUserOnly, NotVerifiedAccountOnly, VerifiedAccountOnly
 from .token import CustomJWTAuthenticationClass
 from .tasks import send_async_email_to_user
-from blog.models import Post
+from activity_log.mixins import ActivityLogMixin
+from activity_log.models import ActivityLog
 
 class LoginApiView(APIView):
     permission_classes = (NotAuthenticatedUserOnly, )
     authentication_classes = (CustomJWTAuthenticationClass, )
 
     def post(self, request):
-        serializer = serializers.UserLoginSerializer(data=request.data)
+        serializer = serializers.UserLoginSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
 
@@ -36,6 +39,9 @@ class LoginApiView(APIView):
         data = customuser_serializer.data
         data.pop('id')
         token = RefreshToken.for_user(user)
+
+        user_logged_in.send(user.__class__, request=request, user=user)
+
         data['token'] = {"refresh": str(token), "access": str(token.access_token)}
         
         return Response(data, status=status.HTTP_200_OK)
@@ -47,11 +53,14 @@ class LogoutApiView(APIView):
         try:
             access_token = request.headers.get('Authorization').split(' ')[1]
             CustomJWTAuthenticationClass().blacklist_token(access_token)
+
+            user_logged_out.send(request.user.__class__, request=request, user=request.user)
+
             return Response({'success': 'logged out'}, status=status.HTTP_200_OK)
         except Exception as e:
             raise Response({'error': 'Invalid or expired token'}, status=status.HTTP_401_UNAUTHORIZED)
         
-class RegistrationApiView(APIView):
+class RegistrationApiView(ActivityLogMixin, APIView):
     permission_classes = (NotAuthenticatedUserOnly, )
 
     def post(self, request):
@@ -61,10 +70,16 @@ class RegistrationApiView(APIView):
         user = serializer.save()
         return Response({'success': 'registered successfully'}, status=status.HTTP_201_CREATED)
     
+    def _build_log_message(self, request):
+        return f"User: {self._get_user_mixin(request)} \
+            -- Action Type: {'Sign up to Website'} \
+            -- Path: {request.path} \
+            -- Path Name: {resolve(request.path_info).url_name}"
+    
 class OTPRequestThrottle(UserRateThrottle):
     rate = '3/minute'
 
-class AccountVerificationApiView(APIView):
+class AccountVerificationApiView(ActivityLogMixin, APIView):
     permission_classes = (IsAuthenticated, NotVerifiedAccountOnly)
     authentication_classes = (CustomJWTAuthenticationClass, )
     throttle_classes = (OTPRequestThrottle, )
@@ -94,7 +109,17 @@ class AccountVerificationApiView(APIView):
 
         return Response({'error': 'Invalid OTP'}, status=status.HTTP_400_BAD_REQUEST)
     
-class ChangePasswordApiView(GenericAPIView):
+    def _build_log_message(self, request):
+        return f"User: {self._get_user_mixin(request)} \
+            -- Action Type: {
+                    'Activate Account' 
+                    if request.action == 'get'
+                    else 'Request OTP Code To Activate Account'
+                        } \
+            -- Path: {request.path} \
+            -- Path Name: {resolve(request.path_info).url_name}"
+    
+class ChangePasswordApiView(ActivityLogMixin, GenericAPIView):
     permission_classes = (IsAuthenticated, VerifiedAccountOnly)
     authentication_classes = (CustomJWTAuthenticationClass, )
     serializer_class = serializers.ChangePasswordSerializer
@@ -117,11 +142,18 @@ class ChangePasswordApiView(GenericAPIView):
         user.save()
         return Response({'success': 'Password chnged successfully'}, status=status.HTTP_200_OK)
     
-
-class FollowApiView(viewsets.ViewSet, viewsets.GenericViewSet):
+    def _build_log_message(self, request):
+        if self.action == 'put':
+            return f"User: {self._get_user_mixin(request)} \
+                -- Action Type: {'Change Password'} \
+                -- Path: {request.path} \
+                -- Path Name: {resolve(request.path_info).url_name}"
+        return super()._build_log_message(request)
+class FollowApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'username'
     lookup_url_kwarg = 'username'
+    FOLLOWING = False
     
 
     def _get_user(self, username):
@@ -135,11 +167,13 @@ class FollowApiView(viewsets.ViewSet, viewsets.GenericViewSet):
         if followed_user == follower_user:
             return Response({'error': "You cannot follow yourself."}, status=status.HTTP_400_BAD_REQUEST)
 
-        follow_obj, created = Follow.objects.get_or_create(follower=follower_user, followed=followed_user)
+        self.follow_obj, created = Follow.objects.get_or_create(follower=follower_user, followed=followed_user)
         if not created:
-            follow_obj.delete()
+            self.FOLLOWING = False
+            self.unfollowed_user = self.follow_obj.followed.username
+            self.follow_obj.delete()
             return Response({'success': 'You have unfollowed this user.'}, status=status.HTTP_200_OK)
-
+        self.FOLLOWING = True
         return Response({'success': 'You are now following this user.'}, status=status.HTTP_201_CREATED)
 
     def _get_follow_list(self, query_param, serializer_class):
@@ -155,7 +189,25 @@ class FollowApiView(viewsets.ViewSet, viewsets.GenericViewSet):
     def following_list(self, request):
         return self._get_follow_list('follower', serializers.FollowingListSerializer)
     
-class UserProfileApiView(mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    def _get_action_type(self, request):
+        if self.action == 'toggle_follow':
+            if self.FOLLOWING:
+                return ActivityLog.Activity_Type.FOLLOW
+            return ActivityLog.Activity_Type.UNFOLLOW
+        return super()._get_action_type(request)
+    
+    def _build_log_message(self, request):
+        if self.action != 'toggle_follow':
+            return super()._build_log_message(request)
+        
+        return f"User: {self._get_user_mixin(request)} \
+            -- Action Type: 'Following {self.follow_obj.follower.username}' \
+                if self.FOLLOWING else \
+                'Unfollow {self.unfollowed_user}' \
+            -- Path: {request.path} \
+            -- Path Name: {resolve(request.path_info).url_name}"
+    
+class UserProfileApiView(ActivityLogMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
 
     def get_queryset(self):
         return CustomUser.objects.all()

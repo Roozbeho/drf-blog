@@ -6,6 +6,7 @@ from rest_framework.validators import UniqueValidator
 from django.urls import reverse
 from django.conf import settings
 from urllib.parse import urlencode
+from django.contrib.auth.signals import user_login_failed
 
 from .models import CustomUser, Follow
 
@@ -24,6 +25,9 @@ class UserLoginSerializer(serializers.Serializer):
     def validate(self, data):
         user = authenticate(**data)
         if not user or not user.is_active:
+
+            user_login_failed.send(CustomUser, credentials=data, request=self.context['request'])
+            
             raise serializers.ValidationError('Invalid email or password')
         return user
     
