@@ -37,14 +37,14 @@ class ActivityLogMixin:
     
     @staticmethod
     def _get_user_mixin(request):
-        return request.user if request.user.is_authenticated else AnonymousUser()
+        return request.user if request.user.is_authenticated else None
     
     def _get_content_type(self, data):
         try:
             data['content_type'] = ContentType.objects.get_for_model(self.get_queryset().model)
         except (AttributeError, ValidationError):
             data['content_type'] = None
-        except AssertionError:
+        except :
             pass
         return data
     
@@ -72,7 +72,7 @@ class ActivityLogMixin:
                 }
             data = self._get_content_type(data)
             data = self._get_object_id(data)
-            ActivityLog.objects.create(**data)
+            return ActivityLog.objects.create(**data)
     
     def finalize_response(self, request, *args, **kwargs):
         response = super().finalize_response(request, *args, **kwargs)

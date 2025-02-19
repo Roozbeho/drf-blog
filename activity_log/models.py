@@ -19,12 +19,13 @@ class ActivityLog(models.Model):
         UNFOLLOW = 'UN_FOLLOW', 'Un Follow'
         BOOKMARK = 'BOOKMARK', 'Bookmark'
         UNBOOKMARK = 'UN_BOOKMARK', 'Un bookmark'
+        COMMENT = 'COMMENT', 'Comment'
 
     class Action_Status(models.TextChoices):
         SUCCESS = 'SUCC', 'Success'
         FAILED = 'FAIL', 'Failed'
 
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE, related_name='activities', null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='activities', null=True)
     action_type = models.CharField(choices=Activity_Type.choices, max_length=20)
     action_time = models.DateTimeField(auto_now_add=True)
     remarks = models.TextField(blank=True, null=True)
