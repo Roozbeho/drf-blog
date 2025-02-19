@@ -12,11 +12,11 @@ class ActivityLogMixin:
     log_message = None
 
     def _get_action_type(self, request):
-        return self.action_type_mapper().get(str(request.method.upper()))
+        return self.action_type_mapper().get(f"{request.method.upper()}")
     
     def _build_log_messsage(self, request):
         return f'\
-            User: {self._get_user(request)} \
+            User: {self._get_user_mixin(request)} \
             -- Action Type: {self._get_action_type(request)} \
             -- Path: {request.path} \
             -- Path Name: {resolve(request.path_info).url_name}'
@@ -28,6 +28,7 @@ class ActivityLogMixin:
     def action_type_mapper():
         return {
             'GET': ActivityLog.Activity_Type.READ,
+            'RETRIEVE': ActivityLog.Activity_Type.READ,
             'POST': ActivityLog.Activity_Type.CREATE,
             'PUT': ActivityLog.Activity_Type.UPDATE,
             'PATCH': ActivityLog.Activity_Type.UPDATE,
@@ -35,7 +36,7 @@ class ActivityLogMixin:
         }
     
     @staticmethod
-    def _get_user(request):
+    def _get_user_mixin(request):
         return request.user if request.user.is_authenticated else AnonymousUser()
     
     def _get_content_type(self, data):
@@ -55,7 +56,7 @@ class ActivityLogMixin:
         return data
     
     def _write_log(self, request, response):
-        user = self._get_user(request)
+        user = self._get_user_mixin(request)
 
         if user:
             logging.info('Logging... ')
@@ -64,18 +65,18 @@ class ActivityLogMixin:
                 'action_type': self._get_action_type(request),
                 'status': (
                     ActivityLog.Action_Status.SUCCESS
-                    if response.staus_code < 400
+                    if response.status_code < 400
                     else ActivityLog.Action_Status.FAILED
                     ),
                 'remarks': self.get_log_message(request),
                 }
-            data = self._get_action_type(data)
+            data = self._get_content_type(data)
             data = self._get_object_id(data)
             ActivityLog.objects.create(**data)
     
     def finalize_response(self, request, *args, **kwargs):
         response = super().finalize_response(request, *args, **kwargs)
+        print(response)
         self._write_log(request, response)
         return response
-
     
