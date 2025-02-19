@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'accounts.apps.AccountsConfig',
     'blog.apps.BlogConfig',
     'notifications.apps.NotificationsConfig',
+    'activity_log.apps.ActivityLogConfig',
 
     # 3d PARTY APPS
     'rest_framework',
