@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.urls import reverse
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
@@ -25,6 +26,7 @@ from notifications import utils
 from notifications.models import Notification
 from activity_log.mixins import ActivityLogMixin
 from activity_log.models import ActivityLog
+from notifications.utils import send_notification
 
 
 class CreatePostRequestThrottle(UserRateThrottle):
@@ -248,18 +250,23 @@ class LikeApiView(ActivityLogMixin, viewsets.GenericViewSet):
             like_obj = Like.objects.create(post=post, user=request.user)
             self.IS_LIKE = True
             
-            post_author = post.author
-            message = 'someone liked your post'
-
-            Notification.objects.create(user=post_author, message=message)
-            utils.send_notification(post_author.id, message)
+            self._send_message_to_notifiaction(request, post)
 
             return Response({'success': 'You liked this post'}, status=status.HTTP_201_CREATED)
 
         like_obj.delete()
         self.IS_LIKE = False
+
         return Response({'success': 'You unliked this post'}, status=status.HTTP_200_OK)
     
+    @staticmethod
+    def _send_message_to_notifiaction(request, liked_post):
+        liked_post_url = request.build_absolute_uri(
+            reverse('blog:post-detail', args=[liked_post.slug]))
+        notification_message = f'user {request.user.username} Like Your post, post: {liked_post_url}'
+        notification_reviever_id = liked_post.author.id
+        send_notification(notification_reviever_id, notification_message)
+
     def _get_action_type(self, request):
         if self.action == 'create':
             if self.IS_LIKE:
@@ -329,7 +336,8 @@ class ListAndCreateCommentApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.G
 
         serailizer = self.get_serializer(data=request.data, context=context)
         serailizer.is_valid(raise_exception=True)
-        serailizer.save()
+        comment_obj = serailizer.save()
+        self._send_message_to_notifiaction(request, post, comment_obj)
 
         return Response({'success': 'Comment Created'}, status=status.HTTP_201_CREATED)
     
@@ -346,7 +354,19 @@ class ListAndCreateCommentApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.G
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({'success': 'Comment Created'}, status=status.HTTP_201_CREATED)
-        
+    
+    @staticmethod
+    def _send_message_to_notifiaction(request, post, comment_obj):
+        liked_post_url = request.build_absolute_uri(
+            reverse('blog:post-detail', args=[post.slug]))
+        comment_url = request.build_absolute_uri(
+            reverse('blog:comment', args=[comment_obj.uuid])
+        )
+        notification_message = f'user {request.user.username} comment on Your Post, '+\
+            f'post: {liked_post_url}, comment: {comment_url}'
+        notification_reviever_id = post.author.id
+        send_notification(notification_reviever_id, notification_message)
+
     def _build_log_messsage(self, request):
         return f'\
             User: {self._get_user_mixin(request)} \
@@ -357,6 +377,7 @@ class ListAndCreateCommentApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.G
                     } \
             -- Path: {request.path} \
             -- Path Name: {resolve(request.path_info).url_name}'
+    
     def _write_log(self, request, response):
         activitylog_instance = super()._write_log(request, response)
         if activitylog_instance:

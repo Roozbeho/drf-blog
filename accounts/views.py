@@ -24,6 +24,7 @@ from .token import CustomJWTAuthenticationClass
 from .tasks import send_async_email_to_user
 from activity_log.mixins import ActivityLogMixin
 from activity_log.models import ActivityLog
+from notifications.utils import send_notification
 
 class LoginApiView(APIView):
     permission_classes = (NotAuthenticatedUserOnly, )
@@ -172,8 +173,12 @@ class FollowApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.GenericViewSet)
             self.FOLLOWING = False
             self.unfollowed_user = self.follow_obj.followed.username
             self.follow_obj.delete()
+            self._send_message_to_notifiaction(request.user, followed_user, self.FOLLOWING)
+
             return Response({'success': 'You have unfollowed this user.'}, status=status.HTTP_200_OK)
         self.FOLLOWING = True
+        self._send_message_to_notifiaction(request.user, followed_user, self.FOLLOWING)
+
         return Response({'success': 'You are now following this user.'}, status=status.HTTP_201_CREATED)
 
     def _get_follow_list(self, query_param, serializer_class):
@@ -188,6 +193,12 @@ class FollowApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.GenericViewSet)
     @action(methods=['GET'], detail=False, url_path='following', url_name='following-list')
     def following_list(self, request):
         return self._get_follow_list('follower', serializers.FollowingListSerializer)
+    
+    @staticmethod
+    def _send_message_to_notifiaction(sendedr_user, receiver_user, action):
+        notification_message = f'user {sendedr_user.username} {"Follow" if action else "Unfollow"} You.'
+        notification_reviever_id = receiver_user.id
+        send_notification(notification_reviever_id, notification_message)
     
     def _get_action_type(self, request):
         if self.action == 'toggle_follow':
