@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -13,6 +14,7 @@ ALLOWED_HOSTS = []
 
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -23,6 +25,7 @@ INSTALLED_APPS = [
     # LOCAL
     'accounts.apps.AccountsConfig',
     'blog.apps.BlogConfig',
+    'notifications.apps.NotificationsConfig',
 
     # 3d PARTY APPS
     'rest_framework',
@@ -56,8 +59,15 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "core.wsgi.application"
+# WSGI_APPLICATION = "core.wsgi.application"
 
+# TODO: redis should be added for production
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
+ASGI_APPLICATION = "core.asgi.application"
 
 DATABASES = {
     "default": {
@@ -127,6 +137,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+}
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
