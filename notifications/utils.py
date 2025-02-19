@@ -4,6 +4,7 @@ from .models import Notification
 
 def send_notification(user_id, message):
     channel_layer = get_channel_layer()
+    Notification.objects.create(user_id=user_id, message=message)
     async_to_sync(channel_layer.group_send)(
         f'notifications_{user_id}',
         {
