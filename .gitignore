@@ -58,3 +58,4 @@ media/product
 static/admin
 static/debug_toolbar
 /media
+/posts
