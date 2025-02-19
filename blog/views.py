@@ -11,17 +11,25 @@ from rest_framework import viewsets
 from rest_framework import mixins
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.filters import SearchFilter
+from django.urls import resolve
+from django.contrib.contenttypes.models import ContentType
+
 from . import serializers
 from .models import Tag, Post, PostImage, Like, Comment, BookMark
 from .pagination import PostListPagination, CommentListPagination
 from accounts.models import Role, Permission
 from .permissions import CanUserWritePost, OwnerAndAdminOnly, CanUserWriteComment, CanUserBookMarkPosts
 from .ordering import CustomOrderingFilter
+import asyncio
+from notifications import utils
+from notifications.models import Notification
+from activity_log.mixins import ActivityLogMixin
+from activity_log.models import ActivityLog
 
 
 class CreatePostRequestThrottle(UserRateThrottle):
     rate = '300/hour'
-class PostApiView(viewsets.ModelViewSet):
+class PostApiView(ActivityLogMixin, viewsets.ModelViewSet):
     pagination_class = PostListPagination
     filter_backends = (CustomOrderingFilter, )
     search_fields = ['=author__username']
@@ -153,11 +161,11 @@ class ImagesApiView(viewsets.ModelViewSet):
         image.delete()
         return Response({'success': 'image deleted'}, status=status.HTTP_204_NO_CONTENT)
 
-class TagListApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
+class TagListApiView(ActivityLogMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     queryset = Tag.objects.all()
     serializer_class = serializers.TagListSerializer
 
-class PostsByTagApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
+class PostsByTagApiView(ActivityLogMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     pagination_class = PostListPagination
     serializer_class = serializers.PostsListSerializer
 
@@ -188,18 +196,17 @@ class PostsByTagApiView(mixins.ListModelMixin, viewsets.GenericViewSet):
         return Response(serailizer.data, status=status.HTTP_200_OK)
 
 
-class LikeApiView(viewsets.GenericViewSet):
+class LikeApiView(ActivityLogMixin, viewsets.GenericViewSet):
     serializer_class = serializers.PostsListSerializer
+    IS_LIKE = False
+
+    def get_queryset(self):
+        return Post.active_objects.filter(
+            premium=self.request.user.is_authenticated and self.request.user.is_premium
+        )
     
-    def _get_post(self, post_slug=None):
-        if not post_slug:
-            return Response({'error': 'Post slug is required'}, status=status.HTTP_400_BAD_REQUEST)
-        return get_object_or_404(
-            Post.active_objects.filter(
-                premium=self.request.user.is_authenticated and self.request.user.is_premium
-                ),
-            slug=post_slug
-            )
+    def get_object(self):
+        return get_object_or_404(self.get_queryset(), slug=self.kwargs['post_slug'])
     
     def get_permissions(self):
         if self.action in ['create', 'list']:
@@ -208,7 +215,7 @@ class LikeApiView(viewsets.GenericViewSet):
     
     def list(self, request, *args, **kwargs):
         user = request.user
-        queryset = Post.active_objects.filter(Q(premium=user.is_premium) & Q(likes__user=user))
+        queryset = self.get_queryset().filter(likes__user=user)
         page = self.paginate_queryset(queryset)
 
         if page:
@@ -220,7 +227,7 @@ class LikeApiView(viewsets.GenericViewSet):
         return Response(serailizer.data, status=status.HTTP_200_OK)
     
     def retrieve(self, request, post_slug=None):
-        post = self._get_post(post_slug)
+        post = self.get_object()
         
         post_likes_count = post.post_like_count
 
@@ -234,21 +241,37 @@ class LikeApiView(viewsets.GenericViewSet):
         )
 
     def create(self, request, post_slug=None):
-        post = self._get_post(post_slug)
+        post = self.get_object()
 
-        like_obj, created = Like.objects.get_or_create(post=post, user=request.user)
-        
-        if created:
-            return Response({'success': 'You Liked thise post'}, status=status.HTTP_201_CREATED)
-        
+        like_obj = Like.objects.filter(post=post, user=request.user).first()
+        if not like_obj:
+            like_obj = Like.objects.create(post=post, user=request.user)
+            self.IS_LIKE = True
+            
+            post_author = post.author
+            message = 'someone liked your post'
+
+            Notification.objects.create(user=post_author, message=message)
+            utils.send_notification(post_author.id, message)
+
+            return Response({'success': 'You liked this post'}, status=status.HTTP_201_CREATED)
+
         like_obj.delete()
-        return Response({'success': 'You unliked this post'}, status=status.HTTP_204_NO_CONTENT)
+        self.IS_LIKE = False
+        return Response({'success': 'You unliked this post'}, status=status.HTTP_200_OK)
     
-class ListAndCreateCommentApiView(viewsets.ViewSet, viewsets.GenericViewSet):
+    def _get_action_type(self, request):
+        if self.action == 'create':
+            if self.IS_LIKE:
+                return ActivityLog.Activity_Type.LIKE
+            return ActivityLog.Activity_Type.UNLIKE
+        return super()._get_action_type(request)
+
+class ListAndCreateCommentApiView(ActivityLogMixin, viewsets.ViewSet, viewsets.GenericViewSet):
     pagination_class = CommentListPagination
     lookup_field = 'uuid'
     lookup_url_kwarg = 'uuid'
-
+        
     def _get_post(self, post_slug=None):
         if not post_slug:
             return Response({'error': 'Post slug is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -267,12 +290,13 @@ class ListAndCreateCommentApiView(viewsets.ViewSet, viewsets.GenericViewSet):
     
     def get_queryset(self, post_slug=None):
         post = self._get_post(post_slug)
-        return Comment.objects.filter(is_active=True, post=post, level=0)
+        self.query_set = Comment.objects.filter(is_active=True, post=post, level=0)
+        return self.query_set
     
     def get_object(self, uuid=None, post_slug=None):
-        obj = get_object_or_404(self.get_queryset(post_slug), uuid=self.kwargs.get(self.lookup_url_kwarg))
-        self.check_object_permissions(self.request, obj)
-        return obj
+        self.comment_obj = get_object_or_404(self.get_queryset(post_slug), uuid=self.kwargs.get(self.lookup_url_kwarg))
+        self.check_object_permissions(self.request, self.comment_obj)
+        return self.comment_obj
     
     def list(self, request, post_slug=None):
         user = request.user
@@ -322,8 +346,26 @@ class ListAndCreateCommentApiView(viewsets.ViewSet, viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({'success': 'Comment Created'}, status=status.HTTP_201_CREATED)
+        
+    def _build_log_messsage(self, request):
+        return f'\
+            User: {self._get_user_mixin(request)} \
+            -- Action Type: { \
+                    self._get_action_type(request) \
+                    if self.action == 'list' else \
+                    ActivityLog.Activity_Type.COMMENT \
+                    } \
+            -- Path: {request.path} \
+            -- Path Name: {resolve(request.path_info).url_name}'
+    def _write_log(self, request, response):
+        activitylog_instance = super()._write_log(request, response)
+        if activitylog_instance:
+            with transaction.atomic():
+                activitylog_instance.content_type = ContentType.objects.get_for_model(Comment)
+                activitylog_instance.object_id = getattr(self, 'comment_obj', None)
+                activitylog_instance.save()
 
-class UpdateAndDeleteCommentApiView(viewsets.ModelViewSet):
+class UpdateAndDeleteCommentApiView(ActivityLogMixin, viewsets.ModelViewSet):
     lookup_field = 'uuid'
     lookup_url_kwarg = 'uuid'
     permission_classes = [IsAuthenticated, CanUserWriteComment]
@@ -349,9 +391,10 @@ class UpdateAndDeleteCommentApiView(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         comment_obj = self.get_object()
+        self.comment_obj = comment_obj.pk
         comment_obj.is_active = False
         comment_obj.save()
-        return Response({'success': 'Comment deleted'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({'success': 'Comment deleted'}, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -360,15 +403,15 @@ class UpdateAndDeleteCommentApiView(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
 
-        if getattr(instance, '_prefetched_objects_cache', None):
-            # If 'prefetch_related' has been applied to a queryset, we need to
-            # forcibly invalidate the prefetch cache on the instance.
-            instance._prefetched_objects_cache = {}
-
         return Response(serializer.data)
 
+    def _write_log(self, request, response):
+        activitylog_instance = super()._write_log(request, response)
+        if activitylog_instance and self.action == 'destroy':
+            activitylog_instance.object_id = getattr(self, 'comment_obj', None)
+            activitylog_instance.save()
 
-class BookMarkApiView(viewsets.GenericViewSet):
+class BookMarkApiView(ActivityLogMixin, viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated, CanUserBookMarkPosts]
     pagination_class = PostListPagination
     serializer_class = serializers.PostsListSerializer 
@@ -385,14 +428,16 @@ class BookMarkApiView(viewsets.GenericViewSet):
     @action(detail=True, methods=['POST'], url_path='bookmark')
     def bookmark(self, request, post_slug=None):
         post_obj = self.get_object()
+        self.BOOKMARK = False
 
         bookmark_obj, created = BookMark.objects.get_or_create(user=request.user, post=post_obj)
 
         if created:
+            self.BOOKMARK = True
             return Response({'success': 'Post bookmarked'}, status=status.HTTP_201_CREATED)
         
         bookmark_obj.delete()
-        return Response({'success': 'Post unbookmarked'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({'success': 'Post unbookmarked'}, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['GET'], url_path='bookmarks')
     def list_bookmarks(self, request):
@@ -407,5 +452,16 @@ class BookMarkApiView(viewsets.GenericViewSet):
 
         serailizer = self.get_serializer(bookmarks_queryset, many=True)
         return Response(serailizer.data, status=status.HTTP_200_OK)
+    
+    def _get_action_type(self, request):
+        if self.action == 'bookmark':
+            if self.BOOKMARK:
+                return ActivityLog.Activity_Type.BOOKMARK
+            return ActivityLog.Activity_Type.UNBOOKMARK
+        return super()._get_action_type(request)
 
-
+    def _write_log(self, request, response):
+        activitylog_instance = super()._write_log(request, response)
+        if activitylog_instance and self.action == 'list_bookmarks':
+            activitylog_instance.content_type = ContentType.objects.get_for_model(BookMark)
+            activitylog_instance.save()
