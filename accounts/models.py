@@ -49,14 +49,11 @@ class Role(models.Model):
 
             if not role.exists():
                 role = cls.objects.create(name=role_name, default = (role_name == default_role))
-            else:
-                role = role.first()
+                role.reset_permission()
+                for perm in perms:
+                    role.add_permission(perm)
 
-            role.reset_permission()
-            for perm in perms:
-                role.add_permission(perm)
-
-            role.save()
+                role.save()
 
     @classmethod
     def get_default_role_pk(cls):
@@ -93,8 +90,7 @@ class CustomUser(AbstractUser):
     is_active = models.BooleanField(verbose_name=_('Is Active'), default=True)
     verified = models.BooleanField(verbose_name=_('Is Verified'), default=False)
     is_premium = models.BooleanField(verbose_name=_('Is Premium'), default=False)
-    role = models.ForeignKey(Role, default=Role.get_default_role_pk, null=True,
-                             on_delete=models.SET_NULL, related_name='users')
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
 
     joined_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

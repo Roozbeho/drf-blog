@@ -4,6 +4,7 @@ from django.contrib.auth.signals import user_logged_in, user_login_failed, user_
 from django.conf import settings
 
 from activity_log.models import ActivityLog
+from .models import CustomUser, Role
 from .utils import get_client_ip
 
 @receiver(user_logged_in)
@@ -22,3 +23,11 @@ def log_user_login_failed(sender, credentials, request, **kwargs):
 def log_user_logout(sender, request, user, **kwargs):
     message = f"{user.username} is logged out with ip:{get_client_ip(request)}"
     ActivityLog.objects.create(user=user, action_type=ActivityLog.Activity_Type.LOGOUT, remarks=message)
+
+@receiver(pre_save, sender=CustomUser)
+def set_default_role(sender, instance, **kwargs):
+    if not instance.role:
+        if not instance.is_superuser:
+            instance.role = Role.get_default_role_pk()
+        else:
+            instance.role = Role.objects.get(name='Administrator')
