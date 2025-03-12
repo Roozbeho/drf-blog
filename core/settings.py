@@ -76,7 +76,7 @@ DATABASES = {
         "NAME": os.getenv('DB_NAME'),
         "USER": os.getenv('DB_USER'),
         "PASSWORD": os.getenv('DB_PASSWORD'),
-        "HOST": os.getenv('DB_HOST'),
+        "HOST": os.getenv('DB_HOST', 'localhost'),
         "PORT": os.getenv('DB_PORT')
     }
 }
@@ -84,7 +84,7 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'LOCATION': os.getenv('CELERY_RESULT_BACKEND'),
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
             'CONNECTION_POOL_KWARGS': {
@@ -147,5 +147,5 @@ SIMPLE_JWT = {
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 FROM_EMAIL = 'example@gmail.com'
 
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379'
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')
 
