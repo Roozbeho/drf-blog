@@ -1,0 +1,66 @@
+services:
+  db:
+    image: public.ecr.aws/docker/library/postgres:16.4-alpine
+    container_name: db
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: public.ecr.aws/docker/library/redis:alpine
+    container_name: redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      
+  django:
+    build: .
+    container_name: django_1
+    command: ["sh", "-c", "./boot.sh"]
+    ports: 
+      - "8000:8000"
+    volumes:
+      - .:/usr/src/app  
+    env_file:
+      - .env
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  celery:
+    build: .
+    container_name: celery_1
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: celery -A core worker -l info
+
+volumes:
+  db_data:
